@@ -1,12 +1,25 @@
 
+import { db } from '../db';
+import { foodItemsTable } from '../db/schema';
 import { type GetUserFoodItemsInput, type FoodItem } from '../schema';
+import { eq, asc } from 'drizzle-orm';
 
-export async function getUserFoodItems(input: GetUserFoodItemsInput): Promise<FoodItem[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Validate that the user exists and has permission to view their food items
-    // 2. Fetch all food items belonging to the specified user from the database
-    // 3. Return the list of food items ordered by name or creation date
-    
-    return Promise.resolve([]);
-}
+export const getUserFoodItems = async (input: GetUserFoodItemsInput): Promise<FoodItem[]> => {
+  try {
+    // Fetch all food items for the user, ordered by name
+    const results = await db.select()
+      .from(foodItemsTable)
+      .where(eq(foodItemsTable.user_id, input.user_id))
+      .orderBy(asc(foodItemsTable.name))
+      .execute();
+
+    // Convert numeric fields back to numbers before returning
+    return results.map(item => ({
+      ...item,
+      calories_per_100g: parseFloat(item.calories_per_100g)
+    }));
+  } catch (error) {
+    console.error('Failed to get user food items:', error);
+    throw error;
+  }
+};

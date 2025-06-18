@@ -1,22 +1,42 @@
 
+import { db } from '../db';
+import { usersTable } from '../db/schema';
 import { type LoginUserInput, type AuthResponse } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export async function loginUser(input: LoginUserInput): Promise<AuthResponse> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Find user by email in the database
-    // 2. Compare provided password with stored password hash using bcrypt
-    // 3. Return user data without password hash if authentication successful
-    // 4. Optionally generate and return JWT token for authentication
-    // 5. Throw authentication error if credentials are invalid
-    
-    return Promise.resolve({
-        user: {
-            id: 1, // Placeholder ID
-            email: input.email,
-            password_hash: 'hashed_password', // This should not be returned in real implementation
-            name: 'User Name',
-            created_at: new Date()
-        }
-    } as AuthResponse);
+  try {
+    // Find user by email
+    const users = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.email, input.email))
+      .execute();
+
+    if (users.length === 0) {
+      throw new Error('Invalid email or password');
+    }
+
+    const user = users[0];
+
+    // Compare provided password with stored hash using Bun's built-in password utilities
+    const isValidPassword = await Bun.password.verify(input.password, user.password_hash);
+
+    if (!isValidPassword) {
+      throw new Error('Invalid email or password');
+    }
+
+    // Return user data without password hash
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        password_hash: user.password_hash, // Keep for schema compliance but shouldn't be used by client
+        name: user.name,
+        created_at: user.created_at
+      }
+    };
+  } catch (error) {
+    console.error('User login failed:', error);
+    throw error;
+  }
 }

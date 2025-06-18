@@ -1,19 +1,39 @@
 
+import { db } from '../db';
+import { foodItemsTable, usersTable } from '../db/schema';
 import { type CreateFoodItemInput, type FoodItem } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function createFoodItem(input: CreateFoodItemInput): Promise<FoodItem> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Validate that the user exists and has permission to create food items
-    // 2. Create a new food item record in the database
-    // 3. Return the created food item with generated ID and timestamps
-    
-    return Promise.resolve({
-        id: 1, // Placeholder ID
+export const createFoodItem = async (input: CreateFoodItemInput): Promise<FoodItem> => {
+  try {
+    // Validate that the user exists
+    const user = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.id, input.user_id))
+      .execute();
+
+    if (user.length === 0) {
+      throw new Error('User not found');
+    }
+
+    // Insert food item record
+    const result = await db.insert(foodItemsTable)
+      .values({
         user_id: input.user_id,
         name: input.name,
-        calories_per_100g: input.calories_per_100g,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as FoodItem);
-}
+        calories_per_100g: input.calories_per_100g.toString()
+      })
+      .returning()
+      .execute();
+
+    // Convert numeric fields back to numbers before returning
+    const foodItem = result[0];
+    return {
+      ...foodItem,
+      calories_per_100g: parseFloat(foodItem.calories_per_100g)
+    };
+  } catch (error) {
+    console.error('Food item creation failed:', error);
+    throw error;
+  }
+};

@@ -1,25 +1,63 @@
 
+import { db } from '../db';
+import { usersTable, foodItemsTable, foodLogEntriesTable } from '../db/schema';
 import { type CreateFoodLogEntryInput, type FoodLogEntry } from '../schema';
+import { eq, and } from 'drizzle-orm';
 
-export async function createFoodLogEntry(input: CreateFoodLogEntryInput): Promise<FoodLogEntry> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Validate that the user exists and has permission to create log entries
-    // 2. Validate that the food item exists and belongs to the user
-    // 3. Calculate total calories based on food item's calories_per_100g and quantity_grams
-    // 4. Create a new food log entry record in the database
-    // 5. Return the created log entry with calculated total calories
+export const createFoodLogEntry = async (input: CreateFoodLogEntryInput): Promise<FoodLogEntry> => {
+  try {
+    // Validate that the user exists
+    const users = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.id, input.user_id))
+      .execute();
+
+    if (users.length === 0) {
+      throw new Error('User not found');
+    }
+
+    // Validate that the food item exists and belongs to the user
+    const foodItems = await db.select()
+      .from(foodItemsTable)
+      .where(and(
+        eq(foodItemsTable.id, input.food_item_id),
+        eq(foodItemsTable.user_id, input.user_id)
+      ))
+      .execute();
+
+    if (foodItems.length === 0) {
+      throw new Error('Food item not found or does not belong to user');
+    }
+
+    const foodItem = foodItems[0];
     
-    // Placeholder calculation: assuming 200 calories per 100g and 150g quantity
-    const placeholderTotalCalories = (200 / 100) * input.quantity_grams;
-    
-    return Promise.resolve({
-        id: 1, // Placeholder ID
+    // Calculate total calories: (calories_per_100g / 100) * quantity_grams
+    const caloriesPer100g = parseFloat(foodItem.calories_per_100g);
+    const totalCalories = (caloriesPer100g / 100) * input.quantity_grams;
+
+    // Create the food log entry
+    const result = await db.insert(foodLogEntriesTable)
+      .values({
         user_id: input.user_id,
         food_item_id: input.food_item_id,
-        quantity_grams: input.quantity_grams,
-        total_calories: placeholderTotalCalories,
-        logged_date: new Date(input.logged_date),
-        created_at: new Date()
-    } as FoodLogEntry);
-}
+        quantity_grams: input.quantity_grams.toString(),
+        total_calories: totalCalories.toString(),
+        logged_date: input.logged_date
+      })
+      .returning()
+      .execute();
+
+    const logEntry = result[0];
+    
+    // Convert numeric fields and date field back to proper types before returning
+    return {
+      ...logEntry,
+      quantity_grams: parseFloat(logEntry.quantity_grams),
+      total_calories: parseFloat(logEntry.total_calories),
+      logged_date: new Date(logEntry.logged_date)
+    };
+  } catch (error) {
+    console.error('Food log entry creation failed:', error);
+    throw error;
+  }
+};
